@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="hr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Križaljka</title>
+  <style>
+    /* Light mode: white background, dark text. Dark mode: dark background, white text. */
+    :root {
+      --bg: #ffffff;
+      --fg: #1d1d1f;
+      --square: #1d1d1f;   /* black squares in the grid */
+      --clue-bg: #e3e7ee;
+      --active: #ffe27a;
+      --word: #fff6cf;
+      --ok: #cdeccd;
+      --bad: #f6c9c9;
+      --line: #9aa3b2;
+      --muted: #5b6474;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #171a21; --fg: #ffffff; --square: #0c0c0e;
+        --clue-bg: #2a2f3a;
+        --active: #6b5a12; --word: #3a3520; --ok: #24402a; --bad: #502727;
+        --line: #444c5c; --muted: #c3c9d6;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #171a21; --fg: #ffffff; --square: #0c0c0e;
+      --clue-bg: #2a2f3a;
+      --active: #6b5a12; --word: #3a3520; --ok: #24402a; --bad: #502727;
+      --line: #444c5c; --muted: #c3c9d6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
+    h1 { font-size: 1.3rem; margin: 0 auto 0 0; }
+    #pick { flex: 1 1 220px; min-width: 0; max-width: 100%; }
+    select, button {
+      font: inherit; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--line); background: var(--bg); color: inherit;
+    }
+    #layout { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+    #board-wrap { flex: 1 1 520px; min-width: 0; }
+    #board {
+      display: grid;
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      width: 100%;
+      max-width: 900px;
+    }
+    .cell {
+      position: relative;
+      aspect-ratio: 1;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
+      min-width: 0;
+    }
+    .cell.black { background: var(--square); }
+    /* Clue squares hold the clue text. Font size is set on the board by fitClues(). */
+    .cell.clue {
+      background: var(--clue-bg);
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      cursor: pointer;
+      padding: 2px 3px;
+      overflow: hidden;
+      font-size: var(--clue-font, 8px);
+      line-height: 1.15;
+      color: var(--fg);
+      text-align: center;
+      hyphens: auto;
+      overflow-wrap: anywhere;
+    }
+    .cell.clue .seg { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .cell.clue .seg + .seg { border-top: 1px dashed var(--line); }
+    .cell.clue .seg:hover { background: var(--word); }
+    .cell.clue .arrow { font-weight: 700; margin-right: 0.2em; }
+    .cell.word { background: var(--word); }
+    .cell.active { background: var(--active); }
+    .cell.ok { background: var(--ok); }
+    .cell.bad { background: var(--bad); }
+    .cell input {
+      width: 100%; height: 100%;
+      border: 0; background: transparent; color: inherit;
+      text-align: center; text-transform: uppercase;
+      font-size: clamp(0.8rem, 3.2vw, 1.25rem); font-weight: 600;
+      padding: 0; outline: none; caret-color: transparent;
+    }
+    .cell .num {
+      position: absolute; top: 1px; left: 2px;
+      font-size: 0.5rem; color: var(--muted); pointer-events: none;
+    }
+    /* Pictures cover black squares. Placed on the grid with explicit coordinates. */
+    .pic {
+      z-index: 2;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+      border: 1px solid var(--line);
+    }
+    #side { flex: 1 1 280px; min-width: 0; max-width: 100%; }
+    #current-clue {
+      padding: 10px 12px; border-radius: 8px; background: var(--clue-bg);
+      margin-bottom: 12px; min-height: 3em;
+    }
+    #current-clue b { display: block; font-size: 0.8rem; color: var(--muted); }
+    #status { color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
+    .clue-cols { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 560px) { .clue-cols { grid-template-columns: 1fr 1fr; } }
+    .clue-cols h2 { font-size: 0.95rem; margin: 0 0 6px; }
+    .clue-cols ol { list-style: none; padding: 0; margin: 0; font-size: 0.9rem; }
+    .clue-cols li { padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+    .clue-cols li:hover { background: var(--word); }
+    .clue-cols li.on { background: var(--active); }
+    .clue-cols li .n { font-weight: 700; margin-right: 4px; }
+    .empty { color: var(--muted); }
+    .modes { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .modes button { border: 0; border-radius: 0; }
+    .modes button + button { border-left: 1px solid var(--line); }
+    .modes button[aria-pressed="true"] { background: var(--active); font-weight: 700; }
+    #mode-hint { color: var(--muted); font-size: 0.85rem; margin: -4px 0 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Križaljka</h1>
+    <select id="pick" aria-label="Choose a puzzle"></select>
+    <div class="modes" role="group" aria-label="Difficulty">
+      <button type="button" data-mode="easy" aria-pressed="false">Easy</button>
+      <button type="button" data-mode="medium" aria-pressed="false">Medium</button>
+      <button type="button" data-mode="hard" aria-pressed="false">Hard</button>
+    </div>
+    <button id="direction" type="button">Across / Down</button>
+    <button id="check" type="button">Check</button>
+    <button id="reset" type="button">Clear</button>
+  </header>
+
+  <div id="status"></div>
+  <div id="mode-hint"></div>
+
+  <div id="layout">
+    <div id="board-wrap">
+      <div id="board" role="grid"></div>
+    </div>
+    <div id="side">
+      <div id="current-clue"><span class="empty">Click a square to start.</span></div>
+      <div class="clue-cols">
+        <div><h2>Vodoravno</h2><ol id="across"></ol></div>
+        <div><h2>Okomito</h2><ol id="down"></ol></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="data/puzzles.js"></script>
+  <script>
+    // ---------- small helpers ----------
+    // Compare answers without caring about case or diacritics (so DZ also matches DŽ).
+    const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+    const key = (y, x) => y + "," + x;
+    // Saved progress is a nice-to-have, so every storage call is guarded.
+    const store = {
+      get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+      set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+    };
+
+    const puzzles = window.PUZZLES || {};
+    const dates = Object.keys(puzzles).sort().reverse();
+    const pick = document.getElementById("pick");
+    const board = document.getElementById("board");
+    const statusEl = document.getElementById("status");
+    const currentClueEl = document.getElementById("current-clue");
+
+    let puzzle = null;
+    let inputs = {};      // key -> <input>
+    let wordAt = {};      // "across"/"down" -> key -> clue
+    let numberAt = {};    // key -> clue number shown on that square
+    let direction = "across";
+    let active = null;    // {y, x}
+    let mode = store.get("krizaljka:mode") || "easy";   // "easy" | "medium" | "hard"
+
+    if (dates.length === 0) {
+      statusEl.textContent = "No puzzles yet. Run: python3 fetch_krizaljka.py";
+    }
+    dates.forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d + " · " + puzzles[d].title;
+      pick.appendChild(opt);
+    });
+    pick.addEventListener("change", () => load(pick.value));
+
+    function load(date) {
+      puzzle = puzzles[date];
+      board.innerHTML = "";
+      board.style.gridTemplateColumns = `repeat(${puzzle.width}, 1fr)`;
+      inputs = {};
+      wordAt = { across: {}, down: {} };
+      numberAt = {};
+
+      // Map every square to the clue(s) that run through it.
+      for (const clue of [...puzzle.clues.across, ...puzzle.clues.down]) {
+        const [dy, dx] = clue.direction === "across" ? [0, 1] : [1, 0];
+        clue.tokens.forEach((_, i) => {
+          wordAt[clue.direction][key(clue.row + dy * i, clue.col + dx * i)] = clue;
+        });
+        numberAt[key(clue.row, clue.col)] = clue.number;
+      }
+
+      puzzle.grid.forEach((row, y) => row.forEach((cell, x) => {
+        const div = document.createElement("div");
+        div.className = "cell " + cell.kind;
+        // Explicit placement: pictures overlap squares, and auto-placement would shift them.
+        div.style.gridColumn = x + 1;
+        div.style.gridRow = y + 1;
+        if (cell.kind === "black") {
+          board.appendChild(div);
+          return;
+        }
+        if (cell.kind === "clue") {
+          div.innerHTML = clueCellHtml(y, x);
+          // A split square has two halves: the top one is across, the bottom one is down.
+          div.addEventListener("click", (e) => {
+            const half = e.target.closest(".seg");
+            clickClueCell(y, x, half ? half.dataset.dir : null);
+          });
+          board.appendChild(div);
+          return;
+        }
+        const k = key(y, x);
+        const input = document.createElement("input");
+        input.maxLength = cell.letter.length;   // DŽ, LJ, NJ take two keystrokes
+        input.setAttribute("aria-label", `row ${y + 1}, column ${x + 1}`);
+        input.addEventListener("focus", () => setActive(y, x));
+        input.addEventListener("click", () => setActive(y, x));
+        input.addEventListener("input", () => onType(y, x));
+        input.addEventListener("keydown", (e) => onKey(e, y, x));
+        inputs[k] = input;
+        div.appendChild(input);
+        if (numberAt[k]) {
+          const n = document.createElement("span");
+          n.className = "num";
+          n.textContent = numberAt[k];
+          div.appendChild(n);
+        }
+        board.appendChild(div);
+      }));
+
+      // Pictures go over the black squares they were cut for.
+      (puzzle.images || []).forEach((im) => {
+        if (!im.file) return;
+        const img = document.createElement("img");
+        img.className = "pic";
+        img.src = im.file;
+        img.alt = "";
+        img.style.gridColumn = `${im.startX + 1} / ${im.endX + 2}`;
+        img.style.gridRow = `${im.startY + 1} / ${im.endY + 2}`;
+        board.appendChild(img);
+      });
+
+      renderClueLists();
+      restoreProgress();
+      applyMode();
+      active = null;
+      currentClueEl.innerHTML = '<span class="empty">Click a square to start.</span>';
+      updateStatus();
+      fitClues();
+      const first = firstLetterSquare();
+      if (first) setActive(first.y, first.x);
+    }
+
+    // A clue square shows the clue(s) that start beside it: across to the right, down below.
+    function cluesFromClueCell(y, x) {
+      return {
+        across: puzzle.clues.across.find((c) => c.row === y && c.col === x + 1),
+        down: puzzle.clues.down.find((c) => c.row === y + 1 && c.col === x),
+      };
+    }
+
+    function clueCellHtml(y, x) {
+      const { across, down } = cluesFromClueCell(y, x);
+      const seg = (clue, arrow) =>
+        `<span class="seg" data-dir="${clue.direction}"><span><span class="arrow">${arrow}</span>${escapeHtml(clue.clue)}</span></span>`;
+      return (across ? seg(across, "→") : "") + (down ? seg(down, "↓") : "");
+    }
+
+    // Use one font size for all clue squares: the largest that makes every one of them fit.
+    function fitClues() {
+      const cells = [...board.querySelectorAll(".cell.clue")];
+      if (!cells.length) return;
+      // Check the text boxes themselves: they hide their overflow, so the square can't see it.
+      const boxes = cells.flatMap((el) => [...el.querySelectorAll(".seg")]);
+      // Clear any ellipsis from the last fit before measuring again.
+      boxes.forEach((box) => {
+        const inner = box.firstElementChild;
+        inner.style.cssText = "";
+      });
+      const cellWidth = cells[0].getBoundingClientRect().width || 40;
+      const MIN = 7;   // smallest size we consider readable; longer clues get an ellipsis instead
+      let size = Math.max(MIN, Math.min(cellWidth / 3, 22));
+      const fits = () => boxes.every((el) => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1);
+      board.style.setProperty("--clue-font", size + "px");
+      while (!fits() && size > MIN) {
+        size = Math.max(MIN, size - 0.5);
+        board.style.setProperty("--clue-font", size + "px");
+      }
+      // Still too long at the smallest size: cut the text with an ellipsis. Full clue is in the side panel.
+      boxes.forEach((box) => {
+        const inner = box.firstElementChild;
+        if (box.scrollHeight <= box.clientHeight + 1 && box.scrollWidth <= box.clientWidth + 1) return;
+        const lines = Math.max(1, Math.floor(box.clientHeight / (size * 1.15)));
+        Object.assign(inner.style, {
+          display: "-webkit-box",
+          webkitBoxOrient: "vertical",
+          webkitLineClamp: String(lines),
+          overflow: "hidden",
+        });
+      });
+    }
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { if (puzzle) fitClues(); }, 150);
+    });
+
+    // dir is "across" or "down" when a half was clicked; otherwise use whichever clue exists.
+    function clickClueCell(y, x, dir) {
+      const { across, down } = cluesFromClueCell(y, x);
+      const clue = (dir === "across" ? across : dir === "down" ? down : null) || across || down;
+      if (clue) selectClue(clue);
+    }
+
+    function firstLetterSquare() {
+      for (let y = 0; y < puzzle.height; y++)
+        for (let x = 0; x < puzzle.width; x++)
+          if (puzzle.grid[y][x].kind === "letter") return { y, x };
+      return null;
+    }
+
+    function setActive(y, x) {
+      active = { y, x };
+      // If the current direction has no word through this square, switch to the other one.
+      if (!wordAt[direction][key(y, x)]) {
+        direction = direction === "across" ? "down" : "across";
+      }
+      highlight();
+    }
+
+    function highlight() {
+      document.querySelectorAll(".cell").forEach((c) => c.classList.remove("word", "active"));
+      if (!active) return;
+      const k = key(active.y, active.x);
+      const clue = wordAt[direction][k];
+      if (clue) {
+        const [dy, dx] = direction === "across" ? [0, 1] : [1, 0];
+        clue.tokens.forEach((_, i) => {
+          const el = inputs[key(clue.row + dy * i, clue.col + dx * i)];
+          if (el) el.parentElement.classList.add("word");
+        });
+      }
+      inputs[k] && inputs[k].parentElement.classList.add("active");
+      showCurrentClue(clue);
+    }
+
+    function selectClue(clue) {
+      direction = clue.direction;
+      active = { y: clue.row, x: clue.col };
+      highlight();          // update the display directly; focus events are not guaranteed
+      const el = inputs[key(clue.row, clue.col)];
+      if (el) el.focus();
+    }
+
+    function showCurrentClue(clue) {
+      if (!clue) {
+        currentClueEl.innerHTML = '<span class="empty">No word in this direction here.</span>';
+        return;
+      }
+      const dirName = clue.direction === "across" ? "Vodoravno" : "Okomito";
+      currentClueEl.innerHTML = `<b>${clue.number} · ${dirName}</b>${escapeHtml(clue.clue)}`;
+      document.querySelectorAll(".clue-cols li").forEach((li) => {
+        li.classList.toggle("on", li.dataset.id === clue.direction + clue.number);
+      });
+    }
+
+    function renderClueLists() {
+      for (const dir of ["across", "down"]) {
+        const ol = document.getElementById(dir);
+        ol.innerHTML = "";
+        puzzle.clues[dir].sort((a, b) => a.number - b.number || 0);
+        puzzle.clues[dir].forEach((clue) => {
+          const li = document.createElement("li");
+          li.dataset.id = dir + clue.number;
+          li.innerHTML = `<span class="n">${clue.number}</span>${escapeHtml(clue.clue)}`;
+          li.addEventListener("click", () => selectClue(clue));
+          ol.appendChild(li);
+        });
+      }
+    }
+
+    // ---------- difficulty modes ----------
+    // easy:   each letter is checked as soon as it is typed.
+    // medium: a word's letters are checked once every square in that word is filled.
+    // hard:   nothing is marked until the whole grid is full; then every wrong word is highlighted.
+    const MODE_HINTS = {
+      easy: "Easy: every letter is checked as you type.",
+      medium: "Medium: a word is checked once all of its squares are filled.",
+      hard: "Hard: nothing is marked until the grid is full. Then wrong words are highlighted.",
+    };
+
+    function setMode(m) {
+      mode = m;
+      store.set("krizaljka:mode", m);
+      document.querySelectorAll("[data-mode]").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.mode === m));
+      });
+      document.getElementById("mode-hint").textContent = MODE_HINTS[m];
+      if (puzzle) {
+        applyMode();
+        updateStatus();
+      }
+    }
+
+    document.querySelectorAll("[data-mode]").forEach((b) => {
+      b.addEventListener("click", () => setMode(b.dataset.mode));
+    });
+
+    // Re-apply the current mode's marks to whatever is filled in right now.
+    function applyMode() {
+      clearAllMarks();
+      if (mode === "easy") {
+        Object.keys(inputs).forEach(markLetter);
+      } else if (mode === "medium") {
+        [...puzzle.clues.across, ...puzzle.clues.down].filter(isWordFull)
+          .forEach((c) => squaresOf(c).forEach(markLetter));
+      } else if (allFull()) {
+        checkWords();
+      }
+    }
+
+    function squaresOf(clue) {
+      const [dy, dx] = clue.direction === "across" ? [0, 1] : [1, 0];
+      return clue.tokens.map((_, i) => key(clue.row + dy * i, clue.col + dx * i));
+    }
+
+    function wordsThrough(k) {
+      return ["across", "down"].map((d) => wordAt[d][k]).filter(Boolean);
+    }
+
+    function isFull(k) {
+      const el = inputs[k];
+      return el.value.length >= el.maxLength;
+    }
+
+    function isWordFull(clue) {
+      return squaresOf(clue).every(isFull);
+    }
+
+    function allFull() {
+      return Object.keys(inputs).every(isFull);
+    }
+
+    function letterOk(k) {
+      const [y, x] = k.split(",").map(Number);
+      return norm(inputs[k].value) === norm(puzzle.grid[y][x].letter);
+    }
+
+    // cls is "ok", "bad", or null to clear the mark.
+    function mark(k, cls) {
+      const cl = inputs[k].parentElement.classList;
+      cl.remove("ok", "bad");
+      if (cls) cl.add(cls);
+    }
+
+    function markLetter(k) {
+      if (!isFull(k)) return mark(k, null);
+      mark(k, letterOk(k) ? "ok" : "bad");
+    }
+
+    function clearAllMarks() {
+      Object.keys(inputs).forEach((k) => mark(k, null));
+    }
+
+    // Complete words that contain at least one wrong letter.
+    function wrongWords() {
+      return [...puzzle.clues.across, ...puzzle.clues.down].filter(
+        (c) => isWordFull(c) && squaresOf(c).some((k) => !letterOk(k))
+      );
+    }
+
+    // Hard mode: highlight every square that belongs to a wrong word; the rest of the complete words turn green.
+    function checkWords() {
+      const complete = [...puzzle.clues.across, ...puzzle.clues.down].filter(isWordFull);
+      const badSquares = new Set(wrongWords().flatMap(squaresOf));
+      complete.forEach((c) => squaresOf(c).forEach((k) => mark(k, badSquares.has(k) ? "bad" : "ok")));
+    }
+
+    // ---------- typing and keys ----------
+    function onType(y, x) {
+      const k = key(y, x);
+      const el = inputs[k];
+      // Drop stray combining marks (a lone accent from a keyboard dead key shows as a floating symbol).
+      el.value = el.value.normalize("NFC").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+      saveProgress();
+      if (el.value.length >= el.maxLength) moveInWord(1);
+      // The edited square's old mark no longer applies.
+      mark(k, null);
+      if (mode === "easy") {
+        markLetter(k);
+      } else if (mode === "medium") {
+        wordsThrough(k).forEach((c) => { if (isWordFull(c)) squaresOf(c).forEach(markLetter); });
+      } else {
+        clearAllMarks();
+        if (allFull()) checkWords();
+      }
+      updateStatus();
+    }
+
+    function onKey(e, y, x) {
+      // A letter replaces what is already in the square, even when it is filled.
+      if (e.key.length === 1 && /\p{L}/u.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const k = key(y, x);
+        const el = inputs[k];
+        el.value = isFull(k) ? e.key : el.value + e.key;
+        onType(y, x);
+        return;
+      }
+      const arrows = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] };
+      if (arrows[e.key]) {
+        e.preventDefault();
+        const [dy, dx] = arrows[e.key];
+        // Arrow keys change direction too, like crossword apps usually do.
+        direction = dx !== 0 ? "across" : "down";
+        step(y, x, dy, dx);
+      } else if (e.key === "Backspace" && inputs[key(y, x)].value === "") {
+        e.preventDefault();
+        moveInWord(-1);
+      } else if (e.key === "Tab") {
+        return;
+      } else if (e.key === " ") {
+        e.preventDefault();
+        direction = direction === "across" ? "down" : "across";
+        highlight();
+      }
+    }
+
+    // Move one square along the current word, in the given step.
+    function moveInWord(step) {
+      if (!active) return;
+      const [dy, dx] = direction === "across" ? [0, 1] : [1, 0];
+      const next = { y: active.y + dy * step, x: active.x + dx * step };
+      const inWord = wordAt[direction][key(next.y, next.x)];
+      if (inWord && inputs[key(next.y, next.x)]) {
+        inputs[key(next.y, next.x)].focus();
+        if (step < 0) inputs[key(next.y, next.x)].select();
+      }
+    }
+
+    // Move with arrow keys, skipping clue and black squares.
+    function step(y, x, dy, dx) {
+      let ny = y + dy, nx = x + dx;
+      while (ny >= 0 && ny < puzzle.height && nx >= 0 && nx < puzzle.width) {
+        if (inputs[key(ny, nx)]) {
+          inputs[key(ny, nx)].focus();
+          return;
+        }
+        ny += dy; nx += dx;
+      }
+    }
+
+    // ---------- buttons ----------
+    document.getElementById("direction").addEventListener("click", () => {
+      direction = direction === "across" ? "down" : "across";
+      highlight();
+    });
+
+    // Check: easy and medium mark every filled letter; hard marks the complete words.
+    document.getElementById("check").addEventListener("click", () => {
+      if (mode === "hard") {
+        clearAllMarks();
+        checkWords();
+      } else {
+        Object.keys(inputs).forEach(markLetter);
+      }
+      updateStatus();
+    });
+
+    document.getElementById("reset").addEventListener("click", () => {
+      if (!confirm("Clear all your answers for this puzzle?")) return;
+      Object.values(inputs).forEach((el) => {
+        el.value = "";
+        el.parentElement.classList.remove("ok", "bad");
+      });
+      saveProgress();
+      updateStatus();
+    });
+
+    // ---------- progress ----------
+    function saveProgress() {
+      const answers = {};
+      Object.entries(inputs).forEach(([k, el]) => { if (el.value) answers[k] = el.value; });
+      store.set("krizaljka:" + puzzle.date, answers);
+    }
+
+    function restoreProgress() {
+      const answers = store.get("krizaljka:" + puzzle.date) || {};
+      Object.entries(inputs).forEach(([k, el]) => { el.value = answers[k] || ""; });
+    }
+
+    function updateStatus() {
+      const entries = Object.entries(inputs);
+      const filled = entries.filter(([, el]) => el.value).length;
+      const solved = entries.length > 0 && entries.every(([k, el]) => {
+        const [y, x] = k.split(",").map(Number);
+        return norm(el.value) === norm(puzzle.grid[y][x].letter);
+      });
+      if (solved) {
+        statusEl.textContent = `${puzzle.date} · solved!`;
+      } else if (mode === "hard" && allFull()) {
+        const n = wrongWords().length;
+        statusEl.textContent = `${puzzle.date} · ${n} wrong word${n === 1 ? "" : "s"}`;
+      } else {
+        statusEl.textContent = `${puzzle.date} · ${filled} of ${entries.length} squares filled`;
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    setMode(MODE_HINTS[mode] ? mode : "easy");   // sets the highlighted button and hint
+    if (dates.length) load(dates[0]);
+  </script>
+</body>
+</html>
