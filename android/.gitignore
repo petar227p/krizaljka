@@ -1,0 +1,10 @@
+# Build output and local machine settings
+build/
+app/build/
+.gradle/
+.idea/
+local.properties
+*.apk
+
+# The build copies the player and your downloaded puzzles here. Keep them out of git.
+app/src/main/assets/
