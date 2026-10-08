@@ -22,6 +22,9 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);   // the player is plain JavaScript
         settings.setDomStorageEnabled(true);   // saves progress and difficulty per device
         settings.setAllowFileAccess(true);
+        settings.setSupportZoom(true);           // pinch-zoom: zooming in shows the clue text in the squares
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);  // no on-screen +/- buttons
 
         webView.loadUrl("file:///android_asset/index.html");
         setContentView(webView);
